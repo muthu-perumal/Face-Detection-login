@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html {
+  scroll-padding-bottom: 6.5rem;
+}
+
+body {
+  @apply bg-mist font-sans text-ink-950 antialiased;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pine-800 focus-visible:ring-offset-2;
+}
+
+.safe-bottom {
+  padding-bottom: calc(0.7rem + env(safe-area-inset-bottom));
+}
+
+.scan-mask {
+  box-shadow: 0 0 0 999px rgba(8, 12, 20, 0.62);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

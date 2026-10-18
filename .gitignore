@@ -1,0 +1,15 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.log
+coverage
+test-results
+playwright-report
+blob-report
+.vite
+.cache
+.netlify
+tsconfig.tsbuildinfo
