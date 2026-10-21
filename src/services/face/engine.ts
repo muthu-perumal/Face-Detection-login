@@ -52,9 +52,25 @@ export async function descriptorFromImage(image: CanvasImageSource): Promise<num
   return Array.from(found[0].descriptor);
 }
 
-export async function detectFaces(video: HTMLVideoElement): Promise<DetectedFace[]> {
+export async function detectFaces(video: HTMLVideoElement, mode: 'box' | 'landmarks' | 'full' = 'full'): Promise<DetectedFace[]> {
   const faceapi = await loadFaceEngine();
-  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 });
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 });
+  if (mode === 'box') {
+    const found = await faceapi.detectAllFaces(video, options);
+    return found.map((face) => ({
+      box: face.box,
+      landmarks: emptyLandmarks,
+      descriptor: emptyDescriptor,
+    }));
+  }
+  if (mode === 'landmarks') {
+    const found = await faceapi.detectAllFaces(video, options).withFaceLandmarks();
+    return found.map((face) => ({
+      box: face.detection.box,
+      landmarks: face.landmarks,
+      descriptor: emptyDescriptor,
+    }));
+  }
   const found = await faceapi.detectAllFaces(video, options).withFaceLandmarks().withFaceDescriptors();
   return found.map((face) => ({
     box: face.detection.box,
@@ -62,3 +78,10 @@ export async function detectFaces(video: HTMLVideoElement): Promise<DetectedFace
     descriptor: face.descriptor,
   }));
 }
+
+const emptyDescriptor = new Float32Array(128);
+const emptyLandmarks = {
+  getNose: () => [],
+  getLeftEye: () => [],
+  getRightEye: () => [],
+};

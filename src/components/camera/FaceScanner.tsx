@@ -43,6 +43,7 @@ export function FaceScanner({
     let cancelled = false;
     let stream: MediaStream | null = null;
     let frame = 0;
+    let scanning = false;
     let phase: 'position' | 'challenge' | 'capture' | 'hold' = 'position';
     let stableSince = 0;
     let last = 0;
@@ -71,21 +72,26 @@ export function FaceScanner({
     const loop = (time: number) => {
       if (cancelled) return;
       frame = requestAnimationFrame(loop);
-      if (phase === 'hold' || video.readyState < 2 || time - last < 140) return;
+      if (scanning || phase === 'hold' || video.readyState < 2 || time - last < 80) return;
       last = time;
-      void scan(time);
+      scanning = true;
+      void scan(time).finally(() => {
+        scanning = false;
+      });
     };
 
     async function scan(time: number) {
-      const faces = await detectFaces(video);
+      const faces = await detectFaces(video, phase === 'position' ? 'box' : phase === 'challenge' ? 'landmarks' : 'full');
       if (cancelled || phase === 'hold') return;
       if (faces.length !== 1) {
-        stableSince = 0;
-        setState({
-          kind: 'position',
-          tone: 'wait',
-          message: faces.length === 0 ? 'Position your face inside the oval' : 'Only one face should be in the frame',
-        });
+        if (phase === 'position') {
+          stableSince = 0;
+          setState({
+            kind: 'position',
+            tone: 'wait',
+            message: faces.length === 0 ? 'Position your face inside the oval' : 'Only one face should be in the frame',
+          });
+        }
         return;
       }
       const face = faces[0];
@@ -120,7 +126,7 @@ export function FaceScanner({
       if (!challenge) return;
       if (phase === 'challenge') {
         landmarks.push(toLandmark(video, face, mirroredRef.current));
-        if (performance.now() - challengeStarted < 2400) return;
+        if (performance.now() - challengeStarted < 4200) return;
         if (landmarks.length < 8) {
           phase = 'hold';
           setState({ kind: 'failed', message: 'The face was not stable enough. Look at the camera and follow the arrow.' });
@@ -167,11 +173,12 @@ export function FaceScanner({
         const rear = /back|rear|environment/i.test(chosen?.label || '');
         mirroredRef.current = !rear;
         setMirrored(!rear);
+        const preferFront = deviceIndex === 0;
         stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
-          video: chosen?.deviceId
+          video: !preferFront && chosen?.deviceId
             ? { deviceId: { exact: chosen.deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-            : { facingMode: rear ? 'environment' : 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+            : { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
         });
         if (cancelled) {
           stopStream();
@@ -179,6 +186,10 @@ export function FaceScanner({
         }
         video.srcObject = stream;
         video.muted = true;
+        const trackLabel = `${stream.getVideoTracks()[0]?.label || ''} ${stream.getVideoTracks()[0]?.getSettings().facingMode || ''}`;
+        const rearCamera = /back|rear|environment/i.test(trackLabel);
+        mirroredRef.current = !rearCamera;
+        setMirrored(!rearCamera);
         await video.play();
         setState({ kind: 'initializing', message: 'Loading face detection' });
         await loadFaceEngine();
@@ -254,16 +265,30 @@ export function FaceScanner({
 }
 
 function faceQuality(video: HTMLVideoElement, face: DetectedFace): { ok: boolean; message: string } {
-  const width = face.box.width / video.videoWidth;
-  const centerX = (face.box.x + face.box.width / 2) / video.videoWidth;
-  const centerY = (face.box.y + face.box.height / 2) / video.videoHeight;
-  if (width < 0.22) return { ok: false, message: 'Move a little closer to the camera' };
-  if (width > 0.78) return { ok: false, message: 'Move a little farther from the camera' };
-  if (Math.abs(centerX - 0.5) > 0.18 || Math.abs(centerY - 0.48) > 0.2) return { ok: false, message: 'Center your face inside the oval' };
+  const view = visibleFrame(video);
+  const centerX = (face.box.x + face.box.width / 2 - view.x) / view.width;
+  const centerY = (face.box.y + face.box.height / 2 - view.y) / view.height;
+  const width = face.box.width / view.width;
+  if (width < 0.16) return { ok: false, message: 'Move a little closer to the camera' };
+  if (width > 0.95) return { ok: false, message: 'Move a little farther from the camera' };
+  if (centerX < 0.08 || centerX > 0.92 || centerY < 0.05 || centerY > 0.95) return { ok: false, message: 'Center your face inside the oval' };
   const brightness = sampleBrightness(video, face.box);
   if (brightness < 45) return { ok: false, message: 'The lighting is too dark. Face a window or lamp.' };
   if (brightness > 220) return { ok: false, message: 'The lighting is too bright. Reduce backlight.' };
   return { ok: true, message: 'Face detected' };
+}
+
+function visibleFrame(video: HTMLVideoElement): { x: number; y: number; width: number; height: number } {
+  const videoWidth = video.videoWidth || 1;
+  const videoHeight = video.videoHeight || 1;
+  const elementRatio = (video.clientWidth || videoWidth) / (video.clientHeight || videoHeight);
+  const videoRatio = videoWidth / videoHeight;
+  if (videoRatio > elementRatio) {
+    const width = videoHeight * elementRatio;
+    return { x: (videoWidth - width) / 2, y: 0, width, height: videoHeight };
+  }
+  const height = videoWidth / elementRatio;
+  return { x: 0, y: (videoHeight - height) / 2, width: videoWidth, height };
 }
 
 function sampleBrightness(video: HTMLVideoElement, box: DetectedFace['box']): number {

@@ -74,10 +74,10 @@ export function RegisterPage() {
               setReadingPhoto(true);
               setPhotoNote('Looking for a face in that photo…');
               try {
-                const avatar = await readProfilePhoto(file);
-                const image = await loadDataUrl(avatar);
-                const descriptor = await descriptorFromImage(image);
-                setAvatarData(avatar);
+                const image = await loadFile(file);
+                const canvas = fittedCanvas(image, 960);
+                const descriptor = await descriptorFromImage(canvas);
+                setAvatarData(await readProfilePhoto(file));
                 setFaceDescriptor(descriptor);
                 setPhotoNote('Face found. Face sign-in will use this photo.');
               } catch (error) {
@@ -97,11 +97,29 @@ export function RegisterPage() {
   );
 }
 
-function loadDataUrl(url: string): Promise<HTMLImageElement> {
+function loadFile(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('Could not read that photo'));
+    const url = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not read that photo'));
+    };
     image.src = url;
   });
+}
+
+function fittedCanvas(image: HTMLImageElement, maxSize: number): HTMLCanvasElement {
+  const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Could not process that photo');
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas;
 }

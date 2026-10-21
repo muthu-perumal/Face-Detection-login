@@ -79,13 +79,13 @@ export function assessLiveness(
     };
   }
 
-  if (instruction === 'turn_left' && dx > -0.025) {
+  if (instruction === 'turn_left' && dx > -0.012) {
     return { ok: false, reason: 'Turn your head to your left, toward the arrow, then hold still.', movement: Math.abs(dx) };
   }
-  if (instruction === 'turn_right' && dx < 0.025) {
+  if (instruction === 'turn_right' && dx < 0.012) {
     return { ok: false, reason: 'Turn your head to your right, toward the arrow, then hold still.', movement: Math.abs(dx) };
   }
-  if (instruction === 'nod' && dy < 0.02) {
+  if (instruction === 'nod' && dy < 0.012) {
     return { ok: false, reason: 'Nod your head downward, following the arrow.', movement: Math.abs(dy) };
   }
 
