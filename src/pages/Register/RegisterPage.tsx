@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { registerSchema } from '@shared/schemas';
 import { authService } from '@/services/auth/authService';
 import { useAuth } from '@/contexts/AuthContext';
+import { descriptorFromImage } from '@/services/face/engine';
 import { Button, Field, TextInput } from '@/components/ui';
 import { readProfilePhoto } from '@/utils/image';
 
@@ -23,6 +24,9 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const { signIn } = useAuth();
   const [avatarData, setAvatarData] = useState<string | null>(null);
+  const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
+  const [photoNote, setPhotoNote] = useState('A clear photo of your face is what face sign-in will recognize.');
+  const [readingPhoto, setReadingPhoto] = useState(false);
   const form = useForm<FormValues>({ resolver: zodResolver(registerSchema) });
 
   return (
@@ -31,7 +35,7 @@ export function RegisterPage() {
         className="space-y-4 rounded-3xl border border-line bg-white p-5 shadow-card"
         onSubmit={form.handleSubmit(async (values) => {
           try {
-            const created = await authService.register({ ...values, avatarData });
+            const created = await authService.register({ ...values, avatarData, faceDescriptor });
             toast.success(created.message);
             if (!created.pending) {
               await signIn(values.email, values.password);
@@ -57,25 +61,47 @@ export function RegisterPage() {
         </div>
         <Field label="Password" error={form.formState.errors.password?.message}><TextInput type="password" {...form.register('password')} /></Field>
         <Field label="Confirm password" error={form.formState.errors.confirmPassword?.message}><TextInput type="password" {...form.register('confirmPassword')} /></Field>
-        <Field label="Profile photo, optional">
+        <Field label="Face photo">
           <input
             className="block w-full text-sm"
             type="file"
             accept="image/jpeg,image/png"
             onChange={async (event) => {
               const file = event.target.files?.[0];
+              setAvatarData(null);
+              setFaceDescriptor(null);
               if (!file) return;
+              setReadingPhoto(true);
+              setPhotoNote('Looking for a face in that photo…');
               try {
-                setAvatarData(await readProfilePhoto(file));
+                const avatar = await readProfilePhoto(file);
+                const image = await loadDataUrl(avatar);
+                const descriptor = await descriptorFromImage(image);
+                setAvatarData(avatar);
+                setFaceDescriptor(descriptor);
+                setPhotoNote('Face found. Face sign-in will use this photo.');
               } catch (error) {
+                setPhotoNote('A clear photo of your face is what face sign-in will recognize.');
                 toast.error(error instanceof Error ? error.message : 'Could not use that photo');
+              } finally {
+                setReadingPhoto(false);
               }
             }}
           />
+          <span className="mt-1 block text-sm text-ink-700">{photoNote}</span>
         </Field>
-        <Button className="w-full" type="submit" disabled={form.formState.isSubmitting}>Create account</Button>
+        <Button className="w-full" type="submit" disabled={form.formState.isSubmitting || readingPhoto}>Create account</Button>
         <p className="text-sm text-ink-700">Already registered? <Link className="font-semibold text-pine-800" to="/login">Sign in</Link></p>
       </form>
     </div>
   );
+}
+
+function loadDataUrl(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Could not read that photo'));
+    image.src = url;
+  });
 }

@@ -3,7 +3,7 @@ import { pool } from './db';
 import { apiPath, HttpError, json, mapDbError } from './http';
 import { login, logout, me, register, updateProfile } from './routes/auth';
 import { createLoginChallenge, faceLogin } from './routes/faceLogin';
-import { createChallenge, deleteEnrollment, enrollFace, faceStatus } from './routes/face';
+import { createChallenge, deleteEnrollment, enrollFace, enrollFromPhoto, faceStatus } from './routes/face';
 import { clockIn, clockOut, dashboard, history } from './routes/attendance';
 import {
   adminAttendance,
@@ -58,6 +58,7 @@ async function route(request: Request): Promise<Response> {
   if (method === 'POST' && path === '/face/challenge') return createChallenge(request);
   if (method === 'GET' && path === '/face/status') return faceStatus(request);
   if (method === 'POST' && path === '/face/enroll') return enrollFace(request);
+  if (method === 'POST' && path === '/face/enroll-photo') return enrollFromPhoto(request);
   if (method === 'DELETE' && path === '/face/enroll') return deleteEnrollment(request);
   if (method === 'POST' && path === '/attendance/clock-in') return clockIn(request);
   if (method === 'POST' && path === '/attendance/clock-out') return clockOut(request);

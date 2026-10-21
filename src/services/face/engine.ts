@@ -43,6 +43,15 @@ export function loadFaceEngine(): Promise<FaceApi> {
   return loading;
 }
 
+export async function descriptorFromImage(image: CanvasImageSource): Promise<number[]> {
+  const faceapi = await loadFaceEngine();
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 });
+  const found = await faceapi.detectAllFaces(image as HTMLCanvasElement, options).withFaceLandmarks().withFaceDescriptors();
+  if (found.length === 0) throw new Error('No face was found in that photo. Use a clear, front-facing photo of yourself.');
+  if (found.length > 1) throw new Error('That photo has more than one face. Use a photo of only you.');
+  return Array.from(found[0].descriptor);
+}
+
 export async function detectFaces(video: HTMLVideoElement): Promise<DetectedFace[]> {
   const faceapi = await loadFaceEngine();
   const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 });

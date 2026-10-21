@@ -43,12 +43,13 @@ export function FaceScanner({
     let cancelled = false;
     let stream: MediaStream | null = null;
     let frame = 0;
-    let phase: 'position' | 'challenge' | 'hold' = 'position';
+    let phase: 'position' | 'challenge' | 'capture' | 'hold' = 'position';
     let stableSince = 0;
     let last = 0;
     let lastDescriptor = 0;
     let challenge: { challengeId: string; instruction: ChallengeInstruction; prompt: string } | null = null;
     let challengeStarted = 0;
+    let captureStarted = 0;
     const landmarks: LandmarkSample[] = [];
     const samples: number[][] = [];
 
@@ -117,15 +118,28 @@ export function FaceScanner({
         return;
       }
       if (!challenge) return;
-      landmarks.push(toLandmark(video, face, mirroredRef.current));
-      if (time - lastDescriptor > 260 && samples.length < 5) {
+      if (phase === 'challenge') {
+        landmarks.push(toLandmark(video, face, mirroredRef.current));
+        if (performance.now() - challengeStarted < 2400) return;
+        if (landmarks.length < 8) {
+          phase = 'hold';
+          setState({ kind: 'failed', message: 'The face was not stable enough. Look at the camera and follow the arrow.' });
+          return;
+        }
+        phase = 'capture';
+        captureStarted = performance.now();
+        samples.length = 0;
+        setState({ kind: 'position', tone: 'good', message: 'Hold still while your face is checked.' });
+        return;
+      }
+      if (time - lastDescriptor > 180 && samples.length < 5) {
         samples.push(Array.from(face.descriptor));
         lastDescriptor = time;
       }
-      if (performance.now() - challengeStarted < 2300) return;
+      if (samples.length < 4 && performance.now() - captureStarted < 1800) return;
       phase = 'hold';
-      if (samples.length < 3 || landmarks.length < 8) {
-        setState({ kind: 'failed', message: 'The face was not stable enough. Look at the camera and follow the arrow.' });
+      if (samples.length < 3) {
+        setState({ kind: 'failed', message: 'Hold still for a moment so your face can be checked.' });
         return;
       }
       setState({ kind: 'submitting', message: 'Checking the face template' });

@@ -15,6 +15,7 @@ export const registerSchema = z
     password: z.string().min(8, 'Use at least 8 characters').max(72),
     confirmPassword: z.string(),
     avatarData: z.string().max(200_000).optional().nullable(),
+    faceDescriptor: z.array(z.number()).length(128).optional().nullable(),
   })
   .refine((value) => value.password === value.confirmPassword, {
     message: 'Passwords do not match',
@@ -74,6 +75,12 @@ export const faceLoginSchema = z.object({
   challengeId: z.string().uuid(),
   samples: z.array(z.array(z.number())).min(3).max(8),
   landmarks: z.array(landmarkSchema).min(8).max(48),
+});
+
+export const photoEnrollSchema = z.object({
+  consentAccepted: z.literal(true, { errorMap: () => ({ message: 'Consent is required before enrollment' }) }),
+  consentVersion: z.string().min(1).max(40),
+  descriptor: z.array(z.number()).length(128),
 });
 
 export const enrollSchema = z.object({

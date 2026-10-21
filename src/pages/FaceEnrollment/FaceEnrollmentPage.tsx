@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { CONSENT_VERSION } from '@shared/types';
-import { faceService } from '@/services/face/faceService';
+import { disclosureText, faceService } from '@/services/face/faceService';
 import { FaceScanner } from '@/components/camera/FaceScanner';
 import { Button, Card } from '@/components/ui';
 
@@ -25,7 +25,7 @@ export function FaceEnrollmentPage() {
       <h1 className="text-2xl font-semibold">Face enrollment</h1>
       <Card className="space-y-3 text-sm leading-6 text-ink-800">
         <p>Enrollment stores an encrypted numeric face descriptor. It does not store the camera video or an enrollment photograph.</p>
-        <p>{status.data?.disclosure}</p>
+        <p>{disclosureText(status.data?.disclosure)}</p>
         <p>You can delete the template later, subject to company policy, and use manual attendance when that option is enabled.</p>
         <label className="flex items-start gap-3">
           <input className="mt-1 h-5 w-5" type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />

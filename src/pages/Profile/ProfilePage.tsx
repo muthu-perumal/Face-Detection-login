@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { profileSchema } from '@shared/schemas';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { faceService } from '@/services/face/faceService';
+import { disclosureText, faceService } from '@/services/face/faceService';
 import { Button, Card, Field, TextInput } from '@/components/ui';
 import type { PublicUser } from '@shared/types';
 
@@ -54,7 +54,7 @@ export function ProfilePage() {
       <Card className="space-y-3">
         <h2 className="font-semibold">Face enrollment</h2>
         <p className="text-sm text-ink-700">{face.data?.enrollment ? `Enrolled ${new Date(face.data.enrollment.enrolledAt).toLocaleString()}` : 'No face enrolled.'}</p>
-        <p className="text-sm text-ink-700">{face.data?.disclosure}</p>
+        <p className="text-sm text-ink-700">{disclosureText(face.data?.disclosure)}</p>
         <Link className="inline-flex min-h-11 items-center font-semibold text-pine-800" to="/enroll">Manage face enrollment</Link>
       </Card>
       {user?.role === 'admin' ? (

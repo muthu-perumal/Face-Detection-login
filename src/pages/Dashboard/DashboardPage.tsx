@@ -1,8 +1,13 @@
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatClock, formatDuration } from '@shared/attendance';
+import { CONSENT_VERSION } from '@shared/types';
 import { attendanceService } from '@/services/attendance/attendanceService';
+import { descriptorFromImage } from '@/services/face/engine';
+import { faceService } from '@/services/face/faceService';
 import { useAuth } from '@/contexts/AuthContext';
 import { ClockPanel } from '@/components/attendance/ClockPanel';
 import { LiveClock } from '@/components/dashboard/LiveClock';
@@ -11,7 +16,26 @@ import { Card, StatusBadge } from '@/components/ui';
 
 export function DashboardPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const photoTried = useRef(false);
   const query = useQuery({ queryKey: ['dashboard'], queryFn: attendanceService.dashboard });
+  useEffect(() => {
+    if (photoTried.current || !query.data || query.data.faceEnrolled || !user?.avatarData) return;
+    photoTried.current = true;
+    const avatar = user.avatarData;
+    void (async () => {
+      try {
+        const image = await loadDataUrl(avatar);
+        const descriptor = await descriptorFromImage(image);
+        await faceService.enrollPhoto({ consentAccepted: true, consentVersion: CONSENT_VERSION, descriptor });
+        await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        await queryClient.invalidateQueries({ queryKey: ['face'] });
+        toast.success('Your profile photo can now be used for face sign-in.');
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'That profile photo could not be used for face sign-in.');
+      }
+    })();
+  }, [query.data, queryClient, user]);
   if (query.isLoading) return <p className="text-sm text-ink-700">Loading today…</p>;
   if (query.isError || !query.data) return <p className="text-sm text-rose-700">{query.error instanceof Error ? query.error.message : 'Could not load the dashboard.'}</p>;
   const data = query.data;
@@ -85,4 +109,13 @@ export function DashboardPage() {
       </Card>
     </div>
   );
+}
+
+function loadDataUrl(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Could not read the saved profile photo'));
+    image.src = url;
+  });
 }

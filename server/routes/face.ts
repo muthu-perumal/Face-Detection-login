@@ -7,7 +7,7 @@ import {
   samplesAreConsistent,
 } from '../../shared/attendance';
 import { CONSENT_VERSION, MODEL_VERSION, TEMPLATE_VERSION, VERIFICATION_DISCLOSURE, type ChallengeInstruction } from '../../shared/types';
-import { enrollSchema } from '../../shared/schemas';
+import { enrollSchema, photoEnrollSchema } from '../../shared/schemas';
 import { encryptTemplate, decryptTemplate } from '../crypto';
 import { withUser, type DbClient } from '../db';
 import { audit, requireUser } from '../context';
@@ -41,7 +41,7 @@ export async function createChallenge(request: Request): Promise<Response> {
 export async function faceStatus(request: Request): Promise<Response> {
   const user = await requireUser(request);
   const status = await withUser({ id: user.id, role: user.role }, async (client) => readStatus(client, user.id));
-  return json({ enrollment: status, disclosure: VERIFICATION_DISCLOSURE });
+  return json({ enrollment: status, disclosure: VERIFICATION_DISCLOSURE.summary });
 }
 
 export async function enrollFace(request: Request): Promise<Response> {
@@ -88,6 +88,62 @@ export async function enrollFace(request: Request): Promise<Response> {
     };
   });
   return json(outcome.body, outcome.status);
+}
+
+export async function enrollFromPhoto(request: Request): Promise<Response> {
+  const user = await requireUser(request);
+  const body = parseBody(photoEnrollSchema, await readJson(request));
+  if (body.consentVersion !== CONSENT_VERSION) {
+    throw new HttpError(400, 'Open enrollment again and accept the current consent notice.');
+  }
+  const descriptor = normalizeDescriptor(body.descriptor);
+  await withUser({ id: user.id, role: user.role }, async (client) => {
+    await storeEnrollment(client, user.id, descriptor, false);
+  });
+  return json({
+    ok: true,
+    message: 'Your photo is ready for face sign-in.',
+    disclosure: VERIFICATION_DISCLOSURE.summary,
+  });
+}
+
+export async function storeEnrollment(client: DbClient, userId: string, descriptor: number[], replace: boolean): Promise<void> {
+  const settings = await client.query('SELECT face_reenroll_policy FROM attendance_settings WHERE id = 1');
+  const policy = String(settings.rows[0].face_reenroll_policy);
+  const existing = await readStatus(client, userId);
+  if (existing && !replace) return;
+  if (existing && replace) {
+    if (policy === 'disabled') throw new HttpError(403, 'Face re-enrollment is disabled.');
+    if (policy === 'admin_only') throw new HttpError(403, 'An administrator must reset your face enrollment.');
+  }
+  const encrypted = encryptTemplate(descriptor);
+  await client.query(
+    `INSERT INTO face_enrollments
+      (employee_id, encrypted_template, template_version, model_version, consent_version, consent_timestamp, status)
+     VALUES ($1, $2, $3, $4, $5, now(), 'active')
+     ON CONFLICT (employee_id) DO UPDATE
+     SET encrypted_template = EXCLUDED.encrypted_template,
+         template_version = EXCLUDED.template_version,
+         model_version = EXCLUDED.model_version,
+         consent_version = EXCLUDED.consent_version,
+         consent_timestamp = now(),
+         status = 'active'`,
+    [userId, encrypted, TEMPLATE_VERSION, MODEL_VERSION, CONSENT_VERSION],
+  );
+  await audit(client, userId, existing ? 'face.reenrolled' : 'face.enrolled', userId, {
+    model: MODEL_VERSION,
+    consent: CONSENT_VERSION,
+    source: 'photo',
+  });
+}
+
+export function normalizeDescriptor(sample: number[]): number[] {
+  if (sample.length !== 128 || sample.some((value) => typeof value !== 'number' || !Number.isFinite(value))) {
+    throw new HttpError(400, 'Invalid face sample.');
+  }
+  const norm = Math.hypot(...sample);
+  if (norm < 0.75 || norm > 1.25) throw new HttpError(400, 'Invalid face sample.');
+  return sample.map((value) => value / norm);
 }
 
 export async function deleteEnrollment(request: Request): Promise<Response> {
@@ -208,14 +264,7 @@ async function matchLiveSamples(
 
 function normalizeSamples(samples: number[][]): number[][] {
   if (samples.length < 3 || samples.length > 8) throw new HttpError(400, 'Capture between three and eight face samples.');
-  return samples.map((sample) => {
-    if (sample.length !== 128 || sample.some((value) => typeof value !== 'number' || !Number.isFinite(value))) {
-      throw new HttpError(400, 'Invalid face sample.');
-    }
-    const norm = Math.hypot(...sample);
-    if (norm < 0.75 || norm > 1.25) throw new HttpError(400, 'Invalid face sample.');
-    return sample.map((value) => value / norm);
-  });
+  return samples.map((sample) => normalizeDescriptor(sample));
 }
 
 async function readStatus(client: DbClient, userId: string) {

@@ -137,6 +137,16 @@ test('attendance is authenticated, personal, and calculated on the server', asyn
   expect(JSON.stringify(employees.json)).not.toContain('password_hash');
 });
 
+test('a face photo saved at registration can sign in', async () => {
+  const body = { ...account(Date.now() + 70), faceDescriptor: descriptor(15) };
+  const created = await call('/auth/register', { method: 'POST', body });
+  expect(created.status).toBe(201);
+  const signedIn = await faceSignIn(descriptor(15));
+  expect(signedIn.status).toBe(200);
+  expect(signedIn.json.user.email).toBe(body.email);
+  expect(signedIn.json.action).toBe('clock_in');
+});
+
 test('face sign-in clocks in, then clocks out the same day', async () => {
   const person = await registerAndLogin('f');
   expect((await enroll(person.token, descriptor(11))).status).toBe(200);

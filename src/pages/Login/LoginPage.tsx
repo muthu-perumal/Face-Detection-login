@@ -77,7 +77,7 @@ export function LoginPage() {
           <Button className="w-full" type="button" variant="secondary" onClick={() => setFace(true)}>
             <ScanFace size={18} /> Sign in with face
           </Button>
-          <p className="text-sm text-ink-700">A face scan clocks you in. If you already clocked in today, the next scan clocks you out.</p>
+          <p className="text-sm text-ink-700">Face sign-in uses the face photo from your account. Look at the camera, follow the arrow, then hold still. The first scan clocks you in. The next scan the same day clocks you out.</p>
           <p className="text-sm text-ink-700">New employee? <Link className="font-semibold text-pine-800" to="/register">Create an account</Link></p>
         </form>
       </section>

@@ -5,6 +5,7 @@ import { audit, getSettings, requireUser } from '../context';
 import { clientIp, HttpError, json, parseBody, readJson } from '../http';
 import { mapUser } from '../map';
 import { signToken } from '../tokens';
+import { normalizeDescriptor, storeEnrollment } from './face';
 
 const dummyHash = bcrypt.hashSync('dummy-password-not-used', 10);
 
@@ -20,6 +21,7 @@ function cleanAvatar(value?: string | null): string | null {
 export async function register(request: Request): Promise<Response> {
   const body = parseBody(registerSchema, await readJson(request));
   const avatar = cleanAvatar(body.avatarData);
+  const descriptor = body.faceDescriptor?.length ? normalizeDescriptor(body.faceDescriptor) : null;
   const passwordHash = await bcrypt.hash(body.password, 10);
   try {
     const created = await withUser({ id: '', role: 'system' }, async (client) => {
@@ -32,7 +34,8 @@ export async function register(request: Request): Promise<Response> {
         [body.employeeId, body.fullName, body.email, body.department, body.designation, status, passwordHash, avatar],
       );
       const user = mapUser(inserted.rows[0] as Record<string, unknown>);
-      await audit(client, user.id, 'employee.registered', user.id, { status });
+      if (descriptor) await storeEnrollment(client, user.id, descriptor, false);
+      await audit(client, user.id, 'employee.registered', user.id, { status, face: Boolean(descriptor) });
       return user;
     });
     return json({
